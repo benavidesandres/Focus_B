@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -60,19 +61,19 @@ data class FocusUiState(
  */
 sealed class FocusScreen {
     /** Pantalla 1: Selección de actividad (Estudiar / Trabajar / Leer). */
-    object ActivitySelect : FocusScreen()
+    data object ActivitySelect : FocusScreen()
 
     /** Pantalla 2: Selección de duración. */
-    object DurationSelect : FocusScreen()
+    data object DurationSelect : FocusScreen()
 
     /** Pantalla 3: Sesión activa con el temporizador. */
-    object ActiveSession : FocusScreen()
+    data object ActiveSession : FocusScreen()
 
     /** Pantalla 4: Descanso guiado después de completar la sesión. */
     data class BreakTime(val breakDurationMinutes: Int = 5) : FocusScreen()
 
     /** Pantalla 5: Resumen de la sesión completada. */
-    object SessionSummary : FocusScreen()
+    data object SessionSummary : FocusScreen()
 }
 
 /** Estadísticas del día actual. */
@@ -86,9 +87,6 @@ data class TodayStats(
  *
  * @HiltViewModel: Hilt sabe cómo crear este ViewModel con sus dependencias.
  * @Inject constructor: Hilt inyecta FocusTimerEngine y FocusSessionRepository.
- *
- * Usamos AndroidViewModel (en lugar de ViewModel) porque necesitamos el Context
- * de la aplicación para iniciar el ForegroundService.
  */
 @HiltViewModel
 class FocusViewModel @Inject constructor(
@@ -104,9 +102,6 @@ class FocusViewModel @Inject constructor(
      * StateFlow del tiempo restante para la UI del temporizador.
      * stateIn: convierte el Flow frío del engine en un StateFlow caliente
      * que se comparte entre múltiples observadores.
-     *
-     * SharingStarted.WhileSubscribed(5000): mantiene el flow activo
-     * 5 segundos después del último suscriptor (para sobrevivir rotaciones).
      */
     val timerState: StateFlow<TimerState> = timerEngine.timerState
         .stateIn(
@@ -158,17 +153,13 @@ class FocusViewModel @Inject constructor(
 
     /** El usuario presionó el botón de pausa. */
     fun onPauseSession() {
-        val intent = Intent(getApplication(), FocusForegroundService::class.java).apply {
-            putExtra(FocusForegroundService.EXTRA_COMMAND, FocusForegroundService.COMMAND_PAUSE)
-        }
+        val intent = FocusForegroundService.buildPauseIntent(getApplication())
         getApplication<Application>().startService(intent)
     }
 
     /** El usuario presionó el botón de reanudar. */
     fun onResumeSession() {
-        val intent = Intent(getApplication(), FocusForegroundService::class.java).apply {
-            putExtra(FocusForegroundService.EXTRA_COMMAND, FocusForegroundService.COMMAND_RESUME)
-        }
+        val intent = FocusForegroundService.buildResumeIntent(getApplication())
         getApplication<Application>().startService(intent)
     }
 
@@ -278,15 +269,17 @@ class FocusViewModel @Inject constructor(
      */
     private fun loadTodayStats() {
         viewModelScope.launch {
-            sessionRepository.completedSessionsCount.collect { count ->
-                _uiState.update { state ->
-                    state.copy(todayStats = state.todayStats.copy(completedSessions = count))
-                }
+            combine(
+                sessionRepository.completedSessionsCount,
+                sessionRepository.totalFocusTimeMs
+            ) { count, totalMs ->
+                TodayStats(
+                    completedSessions = count,
+                    totalFocusMinutes = (totalMs / 60_000L).toInt()
+                )
+            }.collect { stats ->
+                _uiState.update { it.copy(todayStats = stats) }
             }
         }
     }
 }
-
-// Necesario para el Intent dentro del ViewModel
-private fun Intent(context: android.content.Context, cls: Class<*>) =
-    android.content.Intent(context, cls)

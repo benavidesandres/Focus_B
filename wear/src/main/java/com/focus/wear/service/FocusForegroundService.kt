@@ -77,6 +77,18 @@ class FocusForegroundService : Service() {
             putExtra(EXTRA_ACTIVITY_TYPE, activityTypeName)
         }
 
+        /** Helper para crear el Intent de pausa. */
+        fun buildPauseIntent(context: Context): Intent =
+            Intent(context, FocusForegroundService::class.java).apply {
+                putExtra(EXTRA_COMMAND, COMMAND_PAUSE)
+            }
+
+        /** Helper para crear el Intent de reanudación. */
+        fun buildResumeIntent(context: Context): Intent =
+            Intent(context, FocusForegroundService::class.java).apply {
+                putExtra(EXTRA_COMMAND, COMMAND_RESUME)
+            }
+
         /** Helper para crear el Intent de detención. */
         fun buildStopIntent(context: Context): Intent =
             Intent(context, FocusForegroundService::class.java).apply {
