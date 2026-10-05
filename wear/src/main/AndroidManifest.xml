@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- ─── PERMISOS ────────────────────────────────────────── -->
+
+    <!-- VIBRATE: para la retroalimentación háptica -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <!-- FOREGROUND_SERVICE: para mantener el timer en background -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+
+    <!-- FOREGROUND_SERVICE_HEALTH: clasificación correcta para apps de salud/fitness -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH" />
+
+    <!-- WAKE_LOCK: evita que el CPU se duerma mientras corre el timer -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- BODY_SENSORS: para el detector de inactividad (acelerómetro) -->
+    <uses-permission android:name="android.permission.BODY_SENSORS" />
+
+    <!-- ACCESS_NOTIFICATION_POLICY: para activar el modo No Molestar -->
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
+
+    <!-- POST_NOTIFICATIONS: Android 13+ requiere permiso explícito para notificaciones -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- ─── HARDWARE REQUERIDO ──────────────────────────────── -->
+    <!-- Declaramos que la app es para Wear OS -->
+    <uses-feature
+        android:name="android.hardware.type.watch"
+        android:required="true" />
+
+    <application
+        android:name=".FocusWearApplication"
+        android:allowBackup="false"
+        android:icon="@drawable/ic_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@android:style/Theme.DeviceDefault">
+
+        <!-- Indica que es una app standalone (no necesita el teléfono para funcionar) -->
+        <meta-data
+            android:name="com.google.android.wearable.standalone"
+            android:value="true" />
+
+        <!-- ─── ACTIVIDAD PRINCIPAL ─────────────────────────── -->
+        <activity
+            android:name=".ui.MainActivity"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:theme="@android:style/Theme.DeviceDefault">
+
+            <!-- Splash screen de Wear OS -->
+            <meta-data
+                android:name="android.app.TITLE"
+                android:value="Focus" />
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- ─── FOREGROUND SERVICE ──────────────────────────── -->
+        <!--
+            foregroundServiceType="health": categoría correcta para timers de actividad física.
+            Esto es requerido desde Android 14 (API 34).
+        -->
+        <service
+            android:name=".service.FocusForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="health" />
+
+    </application>
+
+</manifest>

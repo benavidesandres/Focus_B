@@ -1,0 +1,31 @@
+# Gradle
+.gradle/
+build/
+*/build/
+
+# Android Studio / IntelliJ IDEA
+.idea/
+*.iml
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/gradle.xml
+.idea/assetWizardSettings.xml
+.idea/dictionaries
+.idea/libraries
+.idea/caches
+
+# Local configuration
+local.properties
+.kotlin/
+
+# OS generated
+.DS_Store
+Thumbs.db
+
+# Log files
+*.log
+
+# Android Profiling & Native
+captures/
+.externalNativeBuild/
+.cxx/
