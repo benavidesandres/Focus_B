@@ -73,19 +73,25 @@ class InactivityDetector @Inject constructor(
     // Si ya emitimos la alerta de inactividad para este período
     private var inactivityAlertSent: Boolean = false
 
+    // Estado de monitoreo activo
+    private var isMonitoring: Boolean = false
+
     /**
      * Inicia el monitoreo de movimiento.
      * Llamar cuando empieza la sesión de enfoque.
      */
     fun startMonitoring() {
+        if (isMonitoring) return
+
         val accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
             ?: return // El dispositivo no tiene acelerómetro — no hacemos nada
 
+        gravity = FloatArray(3)
         lastMovementMs = System.currentTimeMillis()
         inactivityAlertSent = false
+        isMonitoring = true
 
-        // SENSOR_DELAY_NORMAL: 5 actualizaciones/segundo — suficiente para detectar postura.
-        // No usamos FASTEST porque gastaría demasiada batería.
+        // SENSOR_DELAY_NORMAL: ~5 actualizaciones/segundo — suficiente para detectar inactividad prolongada
         sensorManager.registerListener(
             this,
             accelerometer,
@@ -97,6 +103,8 @@ class InactivityDetector @Inject constructor(
      * Detiene el monitoreo. Llamar cuando la sesión termina o se cancela.
      */
     fun stopMonitoring() {
+        if (!isMonitoring) return
+        isMonitoring = false
         sensorManager.unregisterListener(this)
     }
 
