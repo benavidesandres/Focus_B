@@ -143,7 +143,7 @@ interface FocusSessionDao {
 @Database(
     entities = [FocusSessionEntity::class],
     version = 1,
-    exportSchema = true
+    exportSchema = false
 )
 abstract class FocusDatabase : RoomDatabase() {
 

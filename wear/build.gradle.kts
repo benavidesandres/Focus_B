@@ -41,9 +41,7 @@ android {
         compose = true       // Habilitar Jetpack Compose
     }
 
-    composeOptions {
-        kotlinCompilerExtensionVersion = libs.versions.composeCompiler.get()
-    }
+
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
