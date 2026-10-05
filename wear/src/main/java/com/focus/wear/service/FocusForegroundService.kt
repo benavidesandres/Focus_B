@@ -12,7 +12,10 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
+import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import com.focus.shared.model.FocusDurations
 import com.focus.wear.R
@@ -93,13 +96,35 @@ class FocusForegroundService : Service() {
      */
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
+    // WakeLock para asegurar que el reloj procese el tiempo con la pantalla apagada
+    private var wakeLock: PowerManager.WakeLock? = null
+
+    // Flags de hitos para evitar vibraciones repetidas múltiples veces
+    private var milestone50Triggered = false
+    private var milestone75Triggered = false
+    private var countdownWarningTriggered = false
+
+    // Control de frecuencia para no spammear la notificación en cada tick de 100ms
+    private var lastNotifiedSecond: Long = -1L
+    private var lastNotifiedPausedState: Boolean? = null
+
     override fun onBind(intent: Intent?): IBinder? = null // No usamos binding
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        // Inicia el servicio en foreground inmediatamente para evitar ANR
-        startForeground(NOTIFICATION_ID, buildNotification("Iniciando sesión..."))
+
+        val initialNotification = buildNotification("Iniciando sesión...")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(
+                NOTIFICATION_ID,
+                initialNotification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_HEALTH
+            )
+        } else {
+            startForeground(NOTIFICATION_ID, initialNotification)
+        }
+
         observeTimerForNotifications()
         observeInactivityEvents()
     }
@@ -109,6 +134,8 @@ class FocusForegroundService : Service() {
             COMMAND_START -> {
                 val durationMs = intent.getLongExtra(EXTRA_DURATION_MS, 0L)
                 if (durationMs > 0) {
+                    resetMilestoneFlags()
+                    acquireWakeLock(durationMs)
                     timerEngine.start(scope = serviceScope, durationMs = durationMs)
                     inactivityDetector.startMonitoring()
                     vibrationController.vibrate(HapticPattern.SESSION_START)
@@ -128,36 +155,56 @@ class FocusForegroundService : Service() {
         }
 
         // START_NOT_STICKY: si el sistema mata el servicio, NO lo reinicia automáticamente.
-        // No queremos reanudar un timer sin que el usuario lo sepa.
         return START_NOT_STICKY
     }
 
+    private fun resetMilestoneFlags() {
+        milestone50Triggered = false
+        milestone75Triggered = false
+        countdownWarningTriggered = false
+        lastNotifiedSecond = -1L
+        lastNotifiedPausedState = null
+    }
+
     /**
-     * Observa el timer para actualizar la notificación y detectar finalización.
+     * Observa el timer para actualizar la notificación de forma eficiente y detectar finalización.
      */
     private fun observeTimerForNotifications() {
         timerEngine.timerState
             .onEach { state ->
                 when {
                     state.isFinished -> {
-                        // Sesión completada
+                        releaseWakeLock()
                         vibrationController.vibrate(HapticPattern.SESSION_COMPLETE)
                         inactivityDetector.stopMonitoring()
                         updateNotification("¡Sesión completada! 🎉")
                         stopSelf()
                     }
                     state.isRunning -> {
-                        val timeText = FocusDurations.msToDisplayTime(state.remainingMs)
-                        val statusText = if (state.isPaused) "Pausado • $timeText" else timeText
-                        updateNotification(statusText)
+                        val currentSecond = state.remainingMs / 1000L
+                        // Solo actualizar la notificación cuando cambie el segundo o el estado de pausa
+                        if (currentSecond != lastNotifiedSecond || state.isPaused != lastNotifiedPausedState) {
+                            lastNotifiedSecond = currentSecond
+                            lastNotifiedPausedState = state.isPaused
+                            val timeText = FocusDurations.msToDisplayTime(state.remainingMs)
+                            val statusText = if (state.isPaused) "Pausado • $timeText" else timeText
+                            updateNotification(statusText)
+                        }
 
-                        // Vibrar en los hitos de progreso (50%, 75%)
-                        if (timerEngine.shouldVibrate()) {
+                        // Vibrar exactamente una vez al 50% y al 75%
+                        val progress = state.progress
+                        if (progress >= 0.50f && !milestone50Triggered) {
+                            milestone50Triggered = true
+                            vibrationController.vibrate(HapticPattern.PROGRESS_MILESTONE)
+                        }
+                        if (progress >= 0.75f && !milestone75Triggered) {
+                            milestone75Triggered = true
                             vibrationController.vibrate(HapticPattern.PROGRESS_MILESTONE)
                         }
 
-                        // Alerta de cuenta regresiva en los últimos 60 segundos
-                        if (state.remainingMs <= 60_000 && state.remainingMs > 59_000) {
+                        // Alerta de un solo disparo en el último minuto
+                        if (state.remainingMs in 1..60_000L && !countdownWarningTriggered) {
+                            countdownWarningTriggered = true
                             vibrationController.vibrate(HapticPattern.COUNTDOWN_WARNING)
                         }
                     }
@@ -178,7 +225,7 @@ class FocusForegroundService : Service() {
                         updateNotification("¡Muévete un poco! 🧘")
                     }
                     is InactivityEvent.ActivityResumed -> {
-                        // Volvemos al estado normal — la notificación se actualizará sola
+                        // Volvemos al estado normal
                     }
                 }
             }
@@ -189,15 +236,37 @@ class FocusForegroundService : Service() {
      * Detiene la sesión y limpia recursos.
      */
     private fun stopSession() {
+        releaseWakeLock()
         timerEngine.stop()
         inactivityDetector.stopMonitoring()
         vibrationController.vibrate(HapticPattern.CANCEL_ACTION)
         stopSelf()
     }
 
+    private fun acquireWakeLock(durationMs: Long) {
+        releaseWakeLock()
+        val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
+        wakeLock = powerManager?.newWakeLock(
+            PowerManager.PARTIAL_WAKE_LOCK,
+            "FocusWear:SessionWakeLock"
+        )?.apply {
+            setReferenceCounted(false)
+            acquire(durationMs + 120_000L)
+        }
+    }
+
+    private fun releaseWakeLock() {
+        try {
+            if (wakeLock?.isHeld == true) {
+                wakeLock?.release()
+            }
+        } catch (_: Exception) {}
+        wakeLock = null
+    }
+
     override fun onDestroy() {
         super.onDestroy()
-        // Cancelar todas las corrutinas — evita memory leaks
+        releaseWakeLock()
         serviceScope.cancel()
     }
 

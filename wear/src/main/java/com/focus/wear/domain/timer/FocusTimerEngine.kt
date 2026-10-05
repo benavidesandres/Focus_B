@@ -89,20 +89,19 @@ class FocusTimerEngine @Inject constructor() {
         }
 
         timerJob = scope.launch {
-            // Marca de tiempo del último tick para cálculo preciso
             var lastTickMs = System.currentTimeMillis()
 
             while (_timerState.value.remainingMs > 0) {
-                delay(TICK_INTERVAL_MS)
+                val isPaused = _timerState.value.isPaused
+                // Durante pausa aumentamos el delay para no consumir CPU en el reloj
+                delay(if (isPaused) 500L else TICK_INTERVAL_MS)
 
                 val now = System.currentTimeMillis()
-                // Calculamos el tiempo real transcurrido (puede diferir del delay ideal)
                 val elapsed = now - lastTickMs
                 lastTickMs = now
 
                 _timerState.update { state ->
                     if (state.isPaused) {
-                        // Si está pausado, no descontamos tiempo
                         state
                     } else {
                         val newRemaining = (state.remainingMs - elapsed).coerceAtLeast(0L)
@@ -140,21 +139,5 @@ class FocusTimerEngine @Inject constructor() {
         timerJob?.cancel()
         timerJob = null
         _timerState.update { TimerState() }
-    }
-
-    /**
-     * Verifica si el tiempo restante está en alguno de los puntos de alerta.
-     * Se usa para disparar vibraciones en momentos clave.
-     *
-     * @return true si se debe disparar una vibración de progreso.
-     */
-    fun shouldVibrate(): Boolean {
-        val remaining = _timerState.value.remainingMs
-        val total = _timerState.value.totalDurationMs
-        if (total == 0L) return false
-
-        // Vibrar al 50% y al 75% del tiempo completado
-        val progressPercent = ((total - remaining).toFloat() / total * 100).toInt()
-        return progressPercent == 50 || progressPercent == 75
     }
 }
