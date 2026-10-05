@@ -14,14 +14,22 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.wear.compose.material.Chip
+import androidx.wear.compose.material.ChipDefaults
 import androidx.wear.compose.material.dialog.Alert
 import androidx.wear.compose.material.Text
 import com.focus.wear.ui.screens.ActiveSessionScreen
@@ -150,19 +158,37 @@ private fun FocusApp(viewModel: FocusViewModel) {
  */
 @Composable
 private fun BreakTimeContent(onFinish: () -> Unit) {
-    Box(
+    Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(FocusColors.Background),
-        contentAlignment = Alignment.Center
+            .background(FocusColors.Background)
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
     ) {
-        androidx.wear.compose.material.Chip(
+        Text(
+            text = "¡SESIÓN COMPLETADA!",
+            style = FocusTypography.ActivityLabel,
+            color = FocusColors.Success
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "Tómate un respiro 🌿",
+            style = FocusTypography.StatusMessage,
+            color = FocusColors.TextSecondary
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Chip(
             onClick = onFinish,
+            colors = ChipDefaults.primaryChipColors(
+                backgroundColor = FocusColors.SurfaceVariant,
+                contentColor = FocusColors.StudyAccent
+            ),
             label = {
                 Text(
-                    text = "Descanso",
+                    text = "Volver al inicio",
                     style = FocusTypography.ButtonLabel,
-                    color = FocusColors.TextPrimary
+                    color = FocusColors.StudyAccent
                 )
             }
         )
